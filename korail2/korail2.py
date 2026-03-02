@@ -167,7 +167,6 @@ class DynaPathMasterEngine:
         return "".join(sb)
 
     def generate_token(self, device_id, ts, rand):
-        # 유동적인 it 값과 상수화된 필드들을 사용하여 plaintext 구성
         plaintext = (f"ai={self.APP_ID}&di={device_id}&as={self.AS_VALUE}&"
                      f"su=false&dbg=false&emu=false&hk=false&it={self.app_start_ts}&"
                      f"ts={ts}&rt=0&os=13&dm={self.DEVICE_MODEL}&st={self.OS_TYPE}&sv={self.SDK_VERSION}")
