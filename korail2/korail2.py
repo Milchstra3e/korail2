@@ -189,6 +189,18 @@ def _get_utf8(data, key, default=None):
     else:
         return v
 
+def _format_response_payload(data):
+    try:
+        return json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
+    except (TypeError, ValueError):
+        return repr(data)
+
+def _add_response_payload_note(exc, data):
+    try:
+        exc.add_note("Korail response j:\n" + _format_response_payload(data))
+    except Exception:
+        pass
+
 class Schedule(object):
     """Korail train object. Highly inspired by `korail.py
     <https://raw.githubusercontent.com/devxoul/korail/master/korail/korail.py>`_
@@ -784,16 +796,20 @@ When you want change ID using existing object,
         r = self._session.post(url, data=data, headers=headers)
         j = json.loads(r.text)
 
-        if j['strResult'] == 'SUCC' and j.get('strMbCrdNo') is not None:
-            self._key = j['Key']
-            self.membership_number = j['strMbCrdNo']
-            self.name = j['strCustNm']
-            self.email = j['strEmailAdr']
-            self.logined = True
-            return True
-        else:
-            self.logined = False
-            return False
+        try:
+            if j['strResult'] == 'SUCC' and j.get('strMbCrdNo') is not None:
+                self._key = j['Key']
+                self.membership_number = j['strMbCrdNo']
+                self.name = j['strCustNm']
+                self.email = j['strEmailAdr']
+                self.logined = True
+                return True
+            else:
+                self.logined = False
+                return False
+        except KeyError as exc:
+            _add_response_payload_note(exc, j)
+            raise
 
     def logout(self):
         """Logout from Korail server"""
@@ -803,20 +819,24 @@ When you want change ID using existing object,
 
     def _result_check(self, j):
         """Result data check"""
-        if self.want_feedback:
-            print(j['h_msg_txt'])
+        try:
+            if self.want_feedback:
+                print(j['h_msg_txt'])
 
-        if j['strResult'] == 'FAIL':
-            h_msg_cd = _get_utf8(j, 'h_msg_cd')
-            h_msg_txt = _get_utf8(j, 'h_msg_txt')
-            # P058 : 로그인 필요
-            matched_error = list(filter(lambda x: h_msg_cd in x, (NoResultsError, NeedToLoginError, SoldOutError)))
-            if matched_error:
-                raise matched_error[0](h_msg_cd)
+            if j['strResult'] == 'FAIL':
+                h_msg_cd = _get_utf8(j, 'h_msg_cd')
+                h_msg_txt = _get_utf8(j, 'h_msg_txt')
+                # P058 : 로그인 필요
+                matched_error = list(filter(lambda x: h_msg_cd in x, (NoResultsError, NeedToLoginError, SoldOutError)))
+                if matched_error:
+                    raise matched_error[0](h_msg_cd)
+                else:
+                    raise KorailError(h_msg_txt, h_msg_cd)
             else:
-                raise KorailError(h_msg_txt, h_msg_cd)
-        else:
-            return True
+                return True
+        except KeyError as exc:
+            _add_response_payload_note(exc, j)
+            raise
 
     def search_train_allday(self, dep, arr, date=None, time=None, train_type=TrainType.ALL,
                             passengers=None, include_no_seats=False):
